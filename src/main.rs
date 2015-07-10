@@ -166,14 +166,10 @@ impl Handler for WebSocketServer {
         }
 
         if events.is_writable() {
-            match token {
-                token => {
-                    let mut client = self.clients.get_mut(&token).unwrap();
-                    client.write();
-                    event_loop.reregister(&client.socket, token, client.interest,
-                                          PollOpt::edge() | PollOpt::oneshot()).unwrap();
-                }
-            }
+            let mut client = self.clients.get_mut(&token).unwrap();
+            client.write();
+            event_loop.reregister(&client.socket, token, client.interest,
+                                  PollOpt::edge() | PollOpt::oneshot()).unwrap();
         }
     }
 }
