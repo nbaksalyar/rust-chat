@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::fmt;
+use std::net::SocketAddr;
 
 use mio::*;
 use mio::tcp::*;
@@ -153,8 +154,8 @@ impl Handler for WebSocketServer {
                     self.clients.insert(new_token, WebSocketClient::new(client_socket));
                     self.token_counter += 1;
 
-                    event_loop.register_opt(&self.clients[&new_token].socket, new_token, EventSet::readable(),
-                                            PollOpt::edge() | PollOpt::oneshot()).unwrap();
+                    event_loop.register(&self.clients[&new_token].socket, new_token, EventSet::readable(),
+                                        PollOpt::edge() | PollOpt::oneshot()).unwrap();
                 },
 	        token => {
                     let mut client = self.clients.get_mut(&token).unwrap();
@@ -174,12 +175,10 @@ impl Handler for WebSocketServer {
     }
 }
 
-use std::str::FromStr;
-
 fn main() {
     let server_socket = TcpSocket::v4().unwrap();
 
-    let address = FromStr::from_str("0.0.0.0:10000").unwrap();
+    let address = "0.0.0.0:10000".parse::<SocketAddr>().unwrap();
     server_socket.bind(&address).unwrap();
 
     let server_socket = server_socket.listen(256).unwrap();
@@ -192,9 +191,9 @@ fn main() {
         socket: server_socket
     };
 
-    event_loop.register_opt(&server.socket,
-                            SERVER_TOKEN,
-                            EventSet::readable(),
-                            PollOpt::edge()).unwrap();
+    event_loop.register(&server.socket,
+                        SERVER_TOKEN,
+                        EventSet::readable(),
+                        PollOpt::edge()).unwrap();
     event_loop.run(&mut server).unwrap();
 }
