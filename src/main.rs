@@ -142,7 +142,7 @@ impl Handler for WebSocketServer {
             match token {
                 SERVER_TOKEN => {
                     let client_socket = match self.socket.accept() {
-                        Ok(Some(sock)) => sock,
+                        Ok(Some((sock, addr))) => sock,
                         Ok(None) => unreachable!(),
                         Err(e) => {
                             println!("Accept error: {}", e);
@@ -176,12 +176,8 @@ impl Handler for WebSocketServer {
 }
 
 fn main() {
-    let server_socket = TcpSocket::v4().unwrap();
-
     let address = "0.0.0.0:10000".parse::<SocketAddr>().unwrap();
-    server_socket.bind(&address).unwrap();
-
-    let server_socket = server_socket.listen(256).unwrap();
+    let server_socket = TcpListener::bind(&address).unwrap();
 
     let mut event_loop = EventLoop::new().unwrap();
 
