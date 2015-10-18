@@ -50,9 +50,8 @@ impl ParserHandler for HttpParser {
     }
 }
 
-#[derive(PartialEq)]
 enum ClientState {
-    AwaitingHandshake,
+    AwaitingHandshake(RefCell<Parser<HttpParser>>),
     HandshakeResponse,
     Connected
 }
@@ -60,7 +59,6 @@ enum ClientState {
 struct WebSocketClient {
     socket: TcpStream,
     headers: Rc<RefCell<HashMap<String, String>>>,
-    http_parser: Parser<HttpParser>,
     interest: EventSet,
     state: ClientState
 }
@@ -72,12 +70,11 @@ impl WebSocketClient {
         WebSocketClient {
             socket: socket,
             headers: headers.clone(),
-            http_parser: Parser::request(HttpParser {
+            interest: EventSet::readable(),
+            state: ClientState::AwaitingHandshake(RefCell::new(Parser::request(HttpParser {
                 current_key: None,
                 headers: headers.clone()
-            }),
-            interest: EventSet::readable(),
-            state: ClientState::AwaitingHandshake
+            })))
         }
     }
 
@@ -98,6 +95,15 @@ impl WebSocketClient {
     }
 
     fn read(&mut self) {
+        match self.state {
+            ClientState::AwaitingHandshake(_) => {
+                self.read_handshake();
+            },
+            _ => {}
+        }
+    }
+
+    fn read_handshake(&mut self) {
         loop {
             let mut buf = [0; 2048];
             match self.socket.try_read(&mut buf) {
@@ -109,8 +115,13 @@ impl WebSocketClient {
                     // Socket buffer has got no more bytes.
                     break,
                 Ok(Some(len)) => {
-                    self.http_parser.parse(&buf);
-                    if self.http_parser.is_upgrade() {
+                    let is_upgrade = if let ClientState::AwaitingHandshake(ref parser_state) = self.state {
+                        let mut parser = parser_state.borrow_mut();
+                        parser.parse(&buf);
+                        parser.is_upgrade()
+                    } else { false };
+
+                    if is_upgrade {
                         // Change the current state
                         self.state = ClientState::HandshakeResponse;
 
