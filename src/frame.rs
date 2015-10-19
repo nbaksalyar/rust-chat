@@ -82,7 +82,7 @@ impl WebSocketFrame {
         Ok(payload)
     }
 
-    fn read_length<R: Read>(payload_len: u8, input: &mut R) -> Result<usize, io::Error> {
+    fn read_length<R: Read>(payload_len: u8, input: &mut R) -> IOResult<usize> {
         return match payload_len {
             FRAME_LEN_U64 => input.read_u64::<BigEndian>().map(|v| v as usize).map_err(|e| io::Error::from(e)),
             FRAME_LEN_U16 => input.read_u16::<BigEndian>().map(|v| v as usize).map_err(|e| io::Error::from(e)),
