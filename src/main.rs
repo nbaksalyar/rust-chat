@@ -65,7 +65,8 @@ struct WebSocketClient {
     socket: TcpStream,
     headers: Rc<RefCell<HashMap<String, String>>>,
     interest: EventSet,
-    state: ClientState
+    state: ClientState,
+    outgoing: Vec<WebSocketFrame>
 }
 
 impl WebSocketClient {
@@ -79,11 +80,34 @@ impl WebSocketClient {
             state: ClientState::AwaitingHandshake(RefCell::new(Parser::request(HttpParser {
                 current_key: None,
                 headers: headers.clone()
-            })))
+            }))),
+            outgoing: Vec::new()
         }
     }
 
     fn write(&mut self) {
+        match self.state {
+            ClientState::HandshakeResponse => {
+                self.write_handshake();
+            },
+            ClientState::Connected => {
+                println!("sending {} frames", self.outgoing.len());
+                for frame in self.outgoing.iter() {
+                    if let Err(e) = frame.write(&mut self.socket) {
+                        println!("error on write: {}", e);
+                    }
+                }
+
+                self.outgoing.clear();
+
+                self.interest.remove(EventSet::writable());
+                self.interest.insert(EventSet::readable());
+            },
+            _ => {}
+        }
+    }
+
+    fn write_handshake(&mut self) {
         let headers = self.headers.borrow();
         let response_key = gen_key(&headers.get("Sec-WebSocket-Key").unwrap());
         let response = fmt::format(format_args!("HTTP/1.1 101 Switching Protocols\r\n\
@@ -106,8 +130,17 @@ impl WebSocketClient {
             },
             ClientState::Connected => {
                 let frame = WebSocketFrame::read(&mut self.socket);
+                println!("recv frame: {:?}", frame);
                 match frame {
-                    Ok(frame) => println!("{:?}", frame),
+                    Ok(frame) => {
+                        let payload = String::from_utf8(frame.payload).unwrap();
+                        let reply = WebSocketFrame::from(&*format!("Hello, {}!", payload));
+
+                        self.outgoing.push(reply);
+
+                        self.interest.remove(EventSet::readable());
+                        self.interest.insert(EventSet::writable());
+                    }
                     Err(e) => println!("error while reading frame: {}", e)
                 }
             },
