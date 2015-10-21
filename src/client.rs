@@ -10,7 +10,7 @@ use rustc_serialize::base64::{ToBase64, STANDARD};
 use sha1::Sha1;
 
 use http::HttpParser;
-use frame::WebSocketFrame;
+use frame::{WebSocketFrame, OpCode};
 
 fn gen_key(key: &str) -> String {
     let mut m = Sha1::new();
@@ -94,26 +94,35 @@ impl WebSocketClient {
 
     pub fn read(&mut self) {
         match self.state {
-            ClientState::AwaitingHandshake(_) => {
-                self.read_handshake();
-            },
-            ClientState::Connected => {
-                let frame = WebSocketFrame::read(&mut self.socket);
-                println!("recv frame: {:?}", frame);
-                match frame {
-                    Ok(frame) => {
+            ClientState::AwaitingHandshake(_) => self.read_handshake(),
+            ClientState::Connected => self.read_frame(),
+            _ => {}
+        }
+    }
+
+    fn read_frame(&mut self) {
+        let frame = WebSocketFrame::read(&mut self.socket);
+        println!("recv frame: {:?}", frame);
+        match frame {
+            Ok(frame) => {
+                match frame.get_opcode() {
+                    OpCode::TextFrame => {
                         let payload = String::from_utf8(frame.payload).unwrap();
                         let reply = WebSocketFrame::from(&*format!("Hello, {}!", payload));
 
                         self.outgoing.push(reply);
-
-                        self.interest.remove(EventSet::readable());
-                        self.interest.insert(EventSet::writable());
-                    }
-                    Err(e) => println!("error while reading frame: {}", e)
+                    },
+                    OpCode::Ping => {
+                        println!("ping/pong");
+                        self.outgoing.push(WebSocketFrame::pong(&frame));
+                    },
+                    _ => {}
                 }
-            },
-            _ => {}
+
+                self.interest.remove(EventSet::readable());
+                self.interest.insert(EventSet::writable());
+            }
+            Err(e) => println!("error while reading frame: {}", e)
         }
     }
 

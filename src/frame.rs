@@ -1,6 +1,6 @@
 use std::io;
 use std::io::Result as IOResult;
-use std::io::{Read, Write};
+use std::io::{Read, Write, ErrorKind};
 use std::error::Error;
 use std::u16;
 
@@ -9,14 +9,27 @@ use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 const FRAME_LEN_U16: u8 = 126;
 const FRAME_LEN_U64: u8 = 127;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)]
-enum OpCode {
+pub enum OpCode {
     TextFrame = 1,
     BinaryFrame = 2,
     ConnectionClose = 8,
     Ping = 9,
     Pong = 0xA
+}
+
+impl OpCode {
+    fn from(op: u8) -> Option<OpCode> {
+        match op {
+            1 => Some(OpCode::TextFrame),
+            2 => Some(OpCode::BinaryFrame),
+            8 => Some(OpCode::ConnectionClose),
+            9 => Some(OpCode::Ping),
+            0xA => Some(OpCode::Pong),
+            _ => None
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -27,12 +40,12 @@ pub struct WebSocketFrameHeader {
     rsv2: bool,
     rsv3: bool,
     masked: bool,
-    opcode: u8,
+    opcode: OpCode,
     payload_length: u8
 }
 
 impl WebSocketFrameHeader {
-    fn new_header(len: usize, opcode: u8) -> WebSocketFrameHeader {
+    fn new_header(len: usize, opcode: OpCode) -> WebSocketFrameHeader {
         WebSocketFrameHeader {
             fin: true,
             rsv1: false, rsv2: false, rsv3: false,
@@ -63,7 +76,7 @@ pub struct WebSocketFrame {
 impl<'a> From<&'a [u8]> for WebSocketFrame {
     fn from(payload: &[u8]) -> WebSocketFrame {
         WebSocketFrame {
-            header: WebSocketFrameHeader::new_header(payload.len(), OpCode::BinaryFrame as u8),
+            header: WebSocketFrameHeader::new_header(payload.len(), OpCode::BinaryFrame),
             payload: Vec::from(payload),
             mask: None
         }
@@ -73,7 +86,7 @@ impl<'a> From<&'a [u8]> for WebSocketFrame {
 impl<'a> From<&'a str> for WebSocketFrame {
     fn from(payload: &str) -> WebSocketFrame {
         WebSocketFrame {
-            header: WebSocketFrameHeader::new_header(payload.len(), OpCode::TextFrame as u8),
+            header: WebSocketFrameHeader::new_header(payload.len(), OpCode::TextFrame),
             payload: Vec::from(payload),
             mask: None
         }
@@ -81,6 +94,23 @@ impl<'a> From<&'a str> for WebSocketFrame {
 }
 
 impl WebSocketFrame {
+    pub fn pong(ping_frame: &WebSocketFrame) -> WebSocketFrame {
+        let payload = ping_frame.payload.clone();
+        WebSocketFrame {
+            header: WebSocketFrameHeader::new_header(payload.len(), OpCode::Pong),
+            payload: payload,
+            mask: None
+        }
+    }
+
+    pub fn ping() -> WebSocketFrame {
+        WebSocketFrame {
+            header: WebSocketFrameHeader::new_header(4, OpCode::Ping),
+            payload: Vec::from("ping"),
+            mask: None
+        }
+    }
+
     pub fn write<W: Write>(&self, output: &mut W) -> IOResult<()> {
         let hdr = Self::serialize_header(&self.header);
         try!(output.write_u16::<BigEndian>(hdr));
@@ -97,7 +127,7 @@ impl WebSocketFrame {
 
     pub fn read<R: Read>(input: &mut R) -> IOResult<WebSocketFrame> {
         let buf = try!(input.read_u16::<BigEndian>());
-        let header = Self::parse_header(buf);
+        let header = try!(Self::parse_header(buf).map_err(|s| io::Error::new(ErrorKind::Other, s)));
 
         let len = try!(Self::read_length(header.payload_length, input));
         let mask_key = if header.masked {
@@ -119,6 +149,10 @@ impl WebSocketFrame {
         })
     }
 
+    pub fn get_opcode(&self) -> OpCode {
+        self.header.opcode.clone()
+    }
+
     fn serialize_header(hdr: &WebSocketFrameHeader) -> u16 {
         let b1 = ((hdr.fin as u8) << 7)
                   | ((hdr.rsv1 as u8) << 6)
@@ -132,16 +166,23 @@ impl WebSocketFrame {
         ((b1 as u16) << 8) | (b2 as u16)
     }
 
-    fn parse_header(buf: u16) -> WebSocketFrameHeader {
-        WebSocketFrameHeader {
-            fin: (buf >> 8) & 0x80 == 0x80,
-            rsv1: (buf >> 8) & 0x40 == 0x40,
-            rsv2: (buf >> 8) & 0x20 == 0x20,
-            rsv3: (buf >> 8) & 0x10 == 0x10,
-            opcode: ((buf >> 8) as u8) & 0x0F,
+    fn parse_header(buf: u16) -> Result<WebSocketFrameHeader, String> {
+        let opcode_num = ((buf >> 8) as u8) & 0x0F;
+        let opcode = OpCode::from(opcode_num);
 
-            masked: buf & 0x80 == 0x80,
-            payload_length: (buf as u8) & 0x7F,
+        if let Some(opcode) = opcode {
+            Ok(WebSocketFrameHeader {
+                fin: (buf >> 8) & 0x80 == 0x80,
+                rsv1: (buf >> 8) & 0x40 == 0x40,
+                rsv2: (buf >> 8) & 0x20 == 0x20,
+                rsv3: (buf >> 8) & 0x10 == 0x10,
+                opcode: opcode,
+
+                masked: buf & 0x80 == 0x80,
+                payload_length: (buf as u8) & 0x7F,
+            })
+        } else {
+            Err(format!("Invalid opcode: {}", opcode_num))
         }
     }
 
