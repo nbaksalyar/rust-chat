@@ -1,6 +1,6 @@
 use std::io;
 use std::io::Result as IOResult;
-use std::io::{Read, Write, ErrorKind};
+use std::io::{Read, Write, ErrorKind, Cursor};
 use std::error::Error;
 use std::u16;
 
@@ -94,6 +94,36 @@ impl<'a> From<&'a str> for WebSocketFrame {
 }
 
 impl WebSocketFrame {
+    pub fn close(status_code: u16, reason: &[u8]) -> WebSocketFrame {
+        let body = Vec::with_capacity(2 + reason.len());
+
+        let mut body_cursor = Cursor::new(body);
+        body_cursor.write_u16::<BigEndian>(status_code);
+        body_cursor.write(reason);
+
+        WebSocketFrame {
+            header: WebSocketFrameHeader::new_header(body_cursor.get_ref().len(), OpCode::ConnectionClose),
+            payload: body_cursor.into_inner(),
+            mask: None
+        }
+    }
+
+    pub fn close_from(recv_frame: &WebSocketFrame) -> WebSocketFrame {
+        let body = if recv_frame.payload.len() > 0 {
+            let status_code = &recv_frame.payload[0..2];
+            let mut body = Vec::with_capacity(2);
+            body.write(status_code);
+            body
+        } else {
+            Vec::new()
+        };
+        WebSocketFrame {
+            header: WebSocketFrameHeader::new_header(body.len(), OpCode::ConnectionClose),
+            payload: body,
+            mask: None
+        }
+    }
+
     pub fn pong(ping_frame: &WebSocketFrame) -> WebSocketFrame {
         let payload = ping_frame.payload.clone();
         WebSocketFrame {
@@ -151,6 +181,10 @@ impl WebSocketFrame {
 
     pub fn get_opcode(&self) -> OpCode {
         self.header.opcode.clone()
+    }
+
+    pub fn is_close(&self) -> bool {
+        self.header.opcode == OpCode::ConnectionClose
     }
 
     fn serialize_header(hdr: &WebSocketFrameHeader) -> u16 {

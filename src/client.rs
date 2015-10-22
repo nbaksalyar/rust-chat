@@ -56,22 +56,8 @@ impl WebSocketClient {
 
     pub fn write(&mut self) {
         match self.state {
-            ClientState::HandshakeResponse => {
-                self.write_handshake();
-            },
-            ClientState::Connected => {
-                println!("sending {} frames", self.outgoing.len());
-                for frame in self.outgoing.iter() {
-                    if let Err(e) = frame.write(&mut self.socket) {
-                        println!("error on write: {}", e);
-                    }
-                }
-
-                self.outgoing.clear();
-
-                self.interest.remove(EventSet::writable());
-                self.interest.insert(EventSet::readable());
-            },
+            ClientState::HandshakeResponse => self.write_handshake(),
+            ClientState::Connected => self.write_frames(),
             _ => {}
         }
     }
@@ -90,6 +76,29 @@ impl WebSocketClient {
 
         self.interest.remove(EventSet::writable());
         self.interest.insert(EventSet::readable());
+    }
+
+    fn write_frames(&mut self) {
+        let mut close_connection = false;
+        println!("sending {} frames", self.outgoing.len());
+
+        for frame in self.outgoing.iter() {
+            if let Err(e) = frame.write(&mut self.socket) {
+                println!("error on write: {}", e);
+            }
+
+            if frame.is_close() {
+                close_connection = true;
+            }
+        }
+
+        self.outgoing.clear();
+        self.interest.remove(EventSet::writable());
+        self.interest.insert(if close_connection {
+            EventSet::hup()
+        } else {
+            EventSet::readable()
+        });
     }
 
     pub fn read(&mut self) {
@@ -115,6 +124,9 @@ impl WebSocketClient {
                     OpCode::Ping => {
                         println!("ping/pong");
                         self.outgoing.push(WebSocketFrame::pong(&frame));
+                    },
+                    OpCode::ConnectionClose => {
+                        self.outgoing.push(WebSocketFrame::close_from(&frame));
                     },
                     _ => {}
                 }

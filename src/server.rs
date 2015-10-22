@@ -58,9 +58,21 @@ impl Handler for WebSocketServer {
 
         if events.is_writable() {
             let mut client = self.clients.get_mut(&token).unwrap();
+
             client.write();
+
             event_loop.reregister(&client.socket, token, client.interest,
                                   PollOpt::edge() | PollOpt::oneshot()).unwrap();
+        }
+
+        if events.is_hup() {
+            // Close connection
+            let client = self.clients.remove(&token).unwrap();
+
+            client.socket.shutdown(Shutdown::Both);
+            event_loop.deregister(&client.socket);
+
+            println!("hang up connection");
         }
     }
 }

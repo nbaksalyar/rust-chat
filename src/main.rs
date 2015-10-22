@@ -11,7 +11,6 @@ mod http;
 mod server;
 
 use std::net::SocketAddr;
-use std::collections::HashMap;
 
 use mio::*;
 use mio::tcp::*;
