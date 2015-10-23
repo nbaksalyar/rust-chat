@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::str;
 
@@ -7,7 +6,7 @@ use http_muncher::ParserHandler;
 
 pub struct HttpParser {
     pub current_key: Option<String>,
-    pub headers: Rc<RefCell<HashMap<String, String>>>
+    pub headers: Arc<Mutex<HashMap<String, String>>>
 }
 
 impl ParserHandler for HttpParser {
@@ -17,9 +16,9 @@ impl ParserHandler for HttpParser {
     }
 
     fn on_header_value(&mut self, s: &[u8]) -> bool {
-        self.headers.borrow_mut()
-            .insert(self.current_key.clone().unwrap(),
-                    str::from_utf8(s).unwrap().to_string());
+        let mut headers = self.headers.lock().unwrap();
+        headers.insert(self.current_key.clone().unwrap(),
+                        str::from_utf8(s).unwrap().to_string());
         true
     }
 

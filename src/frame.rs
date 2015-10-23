@@ -33,7 +33,7 @@ impl OpCode {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WebSocketFrameHeader {  
     fin: bool,
     rsv1: bool,
@@ -66,18 +66,18 @@ impl WebSocketFrameHeader {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WebSocketFrame {
     header: WebSocketFrameHeader,
     mask: Option<[u8; 4]>,
     pub payload: Vec<u8>
 }
 
-impl<'a> From<&'a [u8]> for WebSocketFrame {
-    fn from(payload: &[u8]) -> WebSocketFrame {
+impl From<Vec<u8>> for WebSocketFrame {
+    fn from(payload: Vec<u8>) -> WebSocketFrame {
         WebSocketFrame {
             header: WebSocketFrameHeader::new_header(payload.len(), OpCode::BinaryFrame),
-            payload: Vec::from(payload),
+            payload: payload,
             mask: None
         }
     }
