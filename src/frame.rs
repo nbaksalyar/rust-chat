@@ -94,25 +94,29 @@ impl<'a> From<&'a str> for WebSocketFrame {
 }
 
 impl WebSocketFrame {
-    pub fn close(status_code: u16, reason: &[u8]) -> WebSocketFrame {
+    pub fn close(status_code: u16, reason: &[u8]) -> Result<WebSocketFrame, String> {
         let body = Vec::with_capacity(2 + reason.len());
 
         let mut body_cursor = Cursor::new(body);
-        body_cursor.write_u16::<BigEndian>(status_code);
-        body_cursor.write(reason);
 
-        WebSocketFrame {
+        try!(body_cursor.write_u16::<BigEndian>(status_code)
+             .map_err(|e| e.description().to_string()));
+
+        try!(body_cursor.write(reason)
+             .map_err(|e| e.description().to_string()));
+
+        Ok(WebSocketFrame {
             header: WebSocketFrameHeader::new_header(body_cursor.get_ref().len(), OpCode::ConnectionClose),
             payload: body_cursor.into_inner(),
             mask: None
-        }
+        })
     }
 
     pub fn close_from(recv_frame: &WebSocketFrame) -> WebSocketFrame {
         let body = if recv_frame.payload.len() > 0 {
             let status_code = &recv_frame.payload[0..2];
             let mut body = Vec::with_capacity(2);
-            body.write(status_code);
+            body.write(status_code).unwrap();
             body
         } else {
             Vec::new()
@@ -133,10 +137,10 @@ impl WebSocketFrame {
         }
     }
 
-    pub fn ping() -> WebSocketFrame {
+    pub fn ping(payload: Vec<u8>) -> WebSocketFrame {
         WebSocketFrame {
             header: WebSocketFrameHeader::new_header(4, OpCode::Ping),
-            payload: Vec::from("ping"),
+            payload: payload,
             mask: None
         }
     }
@@ -241,8 +245,8 @@ impl WebSocketFrame {
 
     fn read_length<R: Read>(payload_len: u8, input: &mut R) -> IOResult<usize> {
         return match payload_len {
-            FRAME_LEN_U64 => input.read_u64::<BigEndian>().map(|v| v as usize).map_err(|e| io::Error::from(e)),
-            FRAME_LEN_U16 => input.read_u16::<BigEndian>().map(|v| v as usize).map_err(|e| io::Error::from(e)),
+            FRAME_LEN_U64 => input.read_u64::<BigEndian>().map(|v| v as usize).map_err(From::from),
+            FRAME_LEN_U16 => input.read_u16::<BigEndian>().map(|v| v as usize).map_err(From::from),
             _ => Ok(payload_len as usize) // payload_len < 127
         }
     }

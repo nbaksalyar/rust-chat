@@ -61,7 +61,7 @@ impl WebSocketServerState {
             WebSocketEvent::BinaryMessage(tkn, _) |
             WebSocketEvent::Connect(tkn) |
             WebSocketEvent::Close(tkn) |
-            WebSocketEvent::Ping(tkn) => {
+            WebSocketEvent::Ping(tkn, _) => {
                 if let Ok(ref mut clients) = self.clients.write() {
                     let client = clients.get_mut(&tkn).unwrap();
 

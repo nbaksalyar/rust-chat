@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::fmt;
+use std::error::Error;
 use std::sync::mpsc;
 
 use mio::*;
@@ -11,7 +12,6 @@ use sha1::Sha1;
 
 use http::HttpParser;
 use frame::{WebSocketFrame, OpCode};
-use server::WebSocketServer;
 use interface::WebSocketEvent;
 
 const WEBSOCKET_KEY: &'static [u8] = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -39,7 +39,7 @@ pub struct WebSocketClient {
     headers: Arc<Mutex<HashMap<String, String>>>,
     pub interest: EventSet,
     state: ClientState,
-    outgoing: Vec<WebSocketEvent>,
+    outgoing: Vec<WebSocketFrame>,
     tx: Mutex<mpsc::Sender<WebSocketEvent>>,
     event_loop_tx: Sender<WebSocketEvent>,
     token: Token
@@ -65,15 +65,33 @@ impl WebSocketClient {
         }
     }
 
-    pub fn send_message(&mut self, msg: WebSocketEvent) {
-        self.outgoing.push(msg);
+    pub fn send_message(&mut self, msg: WebSocketEvent) -> Result<(), String> {
+        let frame = match msg {
+            WebSocketEvent::TextMessage(_, ref data) => Some(WebSocketFrame::from(&*data.clone())),
+            WebSocketEvent::BinaryMessage(_, ref data) => Some(WebSocketFrame::from(data.clone())),
+            WebSocketEvent::Close(_) => {
+                let close_frame = try!(WebSocketFrame::close(0, b"Server-initiated close"));
+                Some(close_frame)
+            },
+            WebSocketEvent::Ping(_, ref payload) => Some(WebSocketFrame::ping(payload.clone())),
+            _ => None
+        };
+
+        if frame.is_none() {
+            return Err("Wrong message type to send".to_string());
+        }
+
+        self.outgoing.push(frame.unwrap());
 
         if self.interest.is_readable() {
             self.interest.insert(EventSet::writable());
             self.interest.remove(EventSet::readable());
 
-            self.event_loop_tx.send(WebSocketEvent::Reregister(self.token));
+            try!(self.event_loop_tx.send(WebSocketEvent::Reregister(self.token))
+                 .map_err(|e| e.description().to_string()));
         }
+
+        Ok(())
     }
 
     pub fn write(&mut self) {
@@ -104,17 +122,7 @@ impl WebSocketClient {
         let mut close_connection = false;
 
         {
-            let frames = self.outgoing.iter().filter_map(|event| {
-                match *event {
-                    WebSocketEvent::TextMessage(_, ref data) => Some(WebSocketFrame::from(&*data.clone())),
-                    WebSocketEvent::BinaryMessage(_, ref data) => Some(WebSocketFrame::from(data.clone())),
-                    WebSocketEvent::Close(_) => Some(WebSocketFrame::close(0, b"Server-initiated close")),
-                    WebSocketEvent::Ping(_) => Some(WebSocketFrame::ping()),
-                    _ => None
-                }
-            });
-
-            for frame in frames {
+            for frame in self.outgoing.iter() {
                 println!("outgoing {:?}", frame);
 
                 if let Err(e) = frame.write(&mut self.socket) {
@@ -156,12 +164,11 @@ impl WebSocketClient {
                         self.tx.lock().unwrap().send(WebSocketEvent::TextMessage(self.token, payload));
                     },
                     OpCode::Ping => {
-                        println!("ping/pong");
-                        //self.outgoing.send(WebSocketFrame::pong(&frame));
+                        self.outgoing.push(WebSocketFrame::pong(&frame));
                     },
                     OpCode::ConnectionClose => {
                         self.tx.lock().unwrap().send(WebSocketEvent::Close(self.token));
-                        //self.outgoing.send(WebSocketFrame::close_from(&frame));
+                        self.outgoing.push(WebSocketFrame::close_from(&frame));
                     },
                     _ => {}
                 }

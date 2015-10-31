@@ -4,7 +4,8 @@ use mio::Token;
 pub enum WebSocketEvent {
     Connect(Token),
     Close(Token),
-    Ping(Token),
+    Ping(Token, Vec<u8>),
+    Pong(Token, Vec<u8>),
     TextMessage(Token, String),
     BinaryMessage(Token, Vec<u8>),
     // Internal service messages
