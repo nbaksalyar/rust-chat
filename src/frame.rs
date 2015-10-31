@@ -1,5 +1,4 @@
 use std::io;
-use std::io::Result as IOResult;
 use std::io::{Read, Write, ErrorKind, Cursor};
 use std::error::Error;
 use std::u16;
@@ -145,7 +144,7 @@ impl WebSocketFrame {
         }
     }
 
-    pub fn write<W: Write>(&self, output: &mut W) -> IOResult<()> {
+    pub fn write<W: Write>(&self, output: &mut W) -> io::Result<()> {
         let hdr = Self::serialize_header(&self.header);
         try!(output.write_u16::<BigEndian>(hdr));
 
@@ -159,7 +158,7 @@ impl WebSocketFrame {
         Ok(())
     }
 
-    pub fn read<R: Read>(input: &mut R) -> IOResult<WebSocketFrame> {
+    pub fn read<R: Read>(input: &mut R) -> io::Result<WebSocketFrame> {
         let buf = try!(input.read_u16::<BigEndian>());
         let header = try!(Self::parse_header(buf).map_err(|s| io::Error::new(ErrorKind::Other, s)));
 
@@ -230,20 +229,20 @@ impl WebSocketFrame {
         }
     }
 
-    fn read_mask<R: Read>(input: &mut R) -> IOResult<[u8; 4]> {
+    fn read_mask<R: Read>(input: &mut R) -> io::Result<[u8; 4]> {
         let mut buf = [0; 4];
         try!(input.read(&mut buf));
         Ok(buf)
     }
 
-    fn read_payload<R: Read>(payload_len: usize, input: &mut R) -> IOResult<Vec<u8>> {
+    fn read_payload<R: Read>(payload_len: usize, input: &mut R) -> io::Result<Vec<u8>> {
         let mut payload: Vec<u8> = Vec::with_capacity(payload_len);
         unsafe { payload.set_len(payload_len) };
         try!(input.read(&mut payload));
         Ok(payload)
     }
 
-    fn read_length<R: Read>(payload_len: u8, input: &mut R) -> IOResult<usize> {
+    fn read_length<R: Read>(payload_len: u8, input: &mut R) -> io::Result<usize> {
         return match payload_len {
             FRAME_LEN_U64 => input.read_u64::<BigEndian>().map(|v| v as usize).map_err(From::from),
             FRAME_LEN_U16 => input.read_u16::<BigEndian>().map(|v| v as usize).map_err(From::from),
