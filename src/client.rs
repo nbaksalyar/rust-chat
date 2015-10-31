@@ -155,13 +155,15 @@ impl WebSocketClient {
 
     fn read_frame(&mut self) {
         let frame = WebSocketFrame::read(&mut self.socket);
-        println!("recv frame: {:?}", frame);
         match frame {
             Ok(frame) => {
                 match frame.get_opcode() {
                     OpCode::TextFrame => {
                         let payload = String::from_utf8(frame.payload).unwrap();
                         self.tx.lock().unwrap().send(WebSocketEvent::TextMessage(self.token, payload));
+                    },
+                    OpCode::BinaryFrame => {
+                        self.tx.lock().unwrap().send(WebSocketEvent::BinaryMessage(self.token, frame.payload));
                     },
                     OpCode::Ping => {
                         self.outgoing.push(WebSocketFrame::pong(&frame));
@@ -191,7 +193,7 @@ impl WebSocketClient {
                 Ok(None) =>
                     // Socket buffer has got no more bytes.
                     break,
-                Ok(Some(len)) => {
+                Ok(Some(_)) => {
                     let is_upgrade = if let ClientState::AwaitingHandshake(ref parser_state) = self.state {
                         let mut parser = parser_state.lock().unwrap();
                         parser.parse(&buf);

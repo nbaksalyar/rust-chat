@@ -111,7 +111,7 @@ impl Handler for WebSocketServer {
             match token {
                 SERVER_TOKEN => {
                     let client_socket = match self.socket.accept() {
-                        Ok(Some((sock, addr))) => sock,
+                        Ok(Some((sock, _))) => sock,
                         Ok(None) => unreachable!(),
                         Err(e) => {
                             println!("Accept error: {}", e);
