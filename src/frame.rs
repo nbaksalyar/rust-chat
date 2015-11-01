@@ -1,7 +1,6 @@
-use std::io;
+use std::{io, iter, u16};
 use std::io::{Read, Write, ErrorKind, Cursor};
 use std::error::Error;
-use std::u16;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 
@@ -237,7 +236,7 @@ impl WebSocketFrame {
 
     fn read_payload<R: Read>(payload_len: usize, input: &mut R) -> io::Result<Vec<u8>> {
         let mut payload: Vec<u8> = Vec::with_capacity(payload_len);
-        unsafe { payload.set_len(payload_len) };
+        payload.extend(iter::repeat(0).take(payload_len));
         try!(input.read(&mut payload));
         Ok(payload)
     }
