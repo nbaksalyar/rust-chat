@@ -5,8 +5,8 @@ use std::u16;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 
-const FRAME_LEN_U16: u8 = 126;
-const FRAME_LEN_U64: u8 = 127;
+const PAYLOAD_LEN_U16: u8 = 126;
+const PAYLOAD_LEN_U64: u8 = 127;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)]
@@ -55,12 +55,12 @@ impl WebSocketFrameHeader {
     }
 
     fn determine_len(len: usize) -> u8 {
-        if len < (FRAME_LEN_U16 as usize) {
+        if len < (PAYLOAD_LEN_U16 as usize) {
             len as u8
         } else if len < (u16::MAX as usize) {
-            FRAME_LEN_U16
+            PAYLOAD_LEN_U16
         } else {
-            FRAME_LEN_U64
+            PAYLOAD_LEN_U64
         }
     }
 }
@@ -149,8 +149,8 @@ impl WebSocketFrame {
         try!(output.write_u16::<BigEndian>(hdr));
 
         match self.header.payload_length {
-            FRAME_LEN_U16 => try!(output.write_u16::<BigEndian>(self.payload.len() as u16)),
-            FRAME_LEN_U64 => try!(output.write_u64::<BigEndian>(self.payload.len() as u64)),
+            PAYLOAD_LEN_U16 => try!(output.write_u16::<BigEndian>(self.payload.len() as u16)),
+            PAYLOAD_LEN_U64 => try!(output.write_u64::<BigEndian>(self.payload.len() as u64)),
             _ => {}
         }
 
@@ -244,8 +244,8 @@ impl WebSocketFrame {
 
     fn read_length<R: Read>(payload_len: u8, input: &mut R) -> io::Result<usize> {
         return match payload_len {
-            FRAME_LEN_U64 => input.read_u64::<BigEndian>().map(|v| v as usize).map_err(From::from),
-            FRAME_LEN_U16 => input.read_u16::<BigEndian>().map(|v| v as usize).map_err(From::from),
+            PAYLOAD_LEN_U64 => input.read_u64::<BigEndian>().map(|v| v as usize).map_err(From::from),
+            PAYLOAD_LEN_U16 => input.read_u16::<BigEndian>().map(|v| v as usize).map_err(From::from),
             _ => Ok(payload_len as usize) // payload_len < 127
         }
     }
