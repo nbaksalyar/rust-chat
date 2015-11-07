@@ -114,6 +114,9 @@ impl WebSocketClient {
         // Change the state
         self.state = ClientState::Connected;
 
+        // Send the connection event
+        self.tx.lock().unwrap().send(WebSocketEvent::Connect(self.token));
+
         self.interest.remove(EventSet::writable());
         self.interest.insert(EventSet::readable());
     }
@@ -155,6 +158,7 @@ impl WebSocketClient {
 
     fn read_frame(&mut self) {
         let frame = WebSocketFrame::read(&mut self.socket);
+
         match frame {
             Ok(frame) => {
                 match frame.get_opcode() {
@@ -175,8 +179,10 @@ impl WebSocketClient {
                     _ => {}
                 }
 
-                self.interest.remove(EventSet::readable());
-                self.interest.insert(EventSet::writable());
+                if (self.outgoing.len() > 0) {
+                    self.interest.remove(EventSet::readable());
+                    self.interest.insert(EventSet::writable());
+                }
             }
             Err(e) => println!("error while reading frame: {}", e)
         }

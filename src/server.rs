@@ -33,8 +33,6 @@ impl WebSocketServerState {
             clients.insert(new_token, WebSocketClient::new(client_socket, new_token, tx.clone(), event_loop_tx));
         }
 
-        // Calling connection handler
-        tx.send(WebSocketEvent::Connect(new_token));
         new_token
     }
 
