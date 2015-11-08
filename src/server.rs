@@ -38,8 +38,7 @@ impl WebSocketServerState {
 
     pub fn get_peers(&self) -> Option<Vec<Token>> {
         if let Ok(clients) = self.clients.read() {
-            let tokens: Vec<Token> = clients.iter().map(|(tkn, _)| tkn.clone()).collect();
-            Some(tokens)
+            Some(clients.keys().cloned().collect::<Vec<_>>())
         } else {
             None
         }
