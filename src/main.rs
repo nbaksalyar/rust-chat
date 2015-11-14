@@ -1,19 +1,9 @@
 
-extern crate mio;
-extern crate http_muncher;
-extern crate sha1;
-extern crate rustc_serialize;
-extern crate byteorder;
-
-mod frame;
-mod client;
-mod http;
-mod server;
-mod interface;
+extern crate mio_websocket;
 
 use std::net::SocketAddr;
 
-use interface::*;
+use mio_websocket::interface::*;
 
 fn main() {
     let (events, mut ws) = WebSocket::new("0.0.0.0:10000".parse::<SocketAddr>().unwrap());
