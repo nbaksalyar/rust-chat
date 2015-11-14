@@ -4,4 +4,4 @@ version = "0.2.1"
 authors = ["Nikita Baksalyar <nikita.baksalyar@gmail.com>"]
 
 [dependencies]
-mio-websocket = { path = "/home/nikita/projects/mio-websocket" }
+mio-websocket = { git = "https://github.com/nbaksalyar/mio-websocket" }
