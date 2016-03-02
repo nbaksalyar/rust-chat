@@ -13,27 +13,25 @@ fn main() {
 
     loop {
         match ws.next() {
-            WebSocketEvent::Connect(tok) => {
+            (tok, WebSocketEvent::Connect) => {
                 println!("connected peer: {:?}", tok);
             },
 
-            WebSocketEvent::TextMessage(tok, msg) => {
-                println!("msg from {:?}", tok);
-
+            (tok, WebSocketEvent::TextMessage(msg)) => {
                 for peer in ws.get_connected().unwrap() {
                     if peer != tok {
                         println!("-> relaying to peer {:?}", peer);
 
-                        let response = WebSocketEvent::TextMessage(peer, msg.clone());
-                        ws.send(response);
+                        let response = WebSocketEvent::TextMessage(msg.clone());
+                        ws.send((peer, response));
                     }
                 }
             },
 
-            WebSocketEvent::BinaryMessage(tok, msg) => {
+            (tok, WebSocketEvent::BinaryMessage(msg)) => {
                 println!("msg from {:?}", tok);
-                let response = WebSocketEvent::BinaryMessage(tok, msg.clone());
-                ws.send(response);
+                let response = WebSocketEvent::BinaryMessage(msg.clone());
+                ws.send((tok, response));
             },
 
             _ => {}
